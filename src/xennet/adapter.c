@@ -934,7 +934,7 @@ AdapterQueryInformation (
                 Adapter->VifInterface,
                 (PETHERNET_ADDRESS)&infoData);
             info = &infoData;
-            bytesAvailable = ETH_LENGTH_OF_ADDRESS;
+            bytesAvailable = sizeof (ETHERNET_ADDRESS);
             break;
 
         case OID_802_3_CURRENT_ADDRESS:
@@ -942,21 +942,25 @@ AdapterQueryInformation (
                 Adapter->VifInterface,
                 (PETHERNET_ADDRESS)&infoData);
             info = &infoData;
-            bytesAvailable = ETH_LENGTH_OF_ADDRESS;
+            bytesAvailable = sizeof (ETHERNET_ADDRESS);
             break;
 
         case OID_GEN_MAXIMUM_FRAME_SIZE:
-            infoData = Adapter->MaximumFrameSize - sizeof (ETHERNET_HEADER);
+            infoData = Adapter->MaximumFrameSize -
+                       sizeof (ETHERNET_TAGGED_HEADER);
             info = &infoData;
             bytesAvailable = sizeof(ULONG);
             break;
-        case OID_GEN_MAXIMUM_TOTAL_SIZE: {
-            infoData = Adapter->MaximumFrameSize - 4;
+
+        case OID_GEN_MAXIMUM_TOTAL_SIZE:
+            infoData = Adapter->MaximumFrameSize -
+                       sizeof (ETHERNET_TAGGED_HEADER) +
+                       sizeof (ETHERNET_UNTAGGED_HEADER);
 
             info = &infoData;
             bytesAvailable = sizeof(ULONG);
             break;
-        }
+
         case OID_GEN_CURRENT_LOOKAHEAD:
             infoData = Adapter->CurrentLookahead;
             info = &infoData;
@@ -1425,7 +1429,7 @@ AdapterSetGeneralAttributes (
         Adapter->VifInterface,
         (PULONG)&Adapter->MaximumFrameSize);
 
-    generalAttributes.MtuSize = Adapter->MaximumFrameSize - sizeof (ETHERNET_HEADER);
+    generalAttributes.MtuSize = Adapter->MaximumFrameSize - sizeof (ETHERNET_TAGGED_HEADER);
     generalAttributes.MaxXmitLinkSpeed = XENNET_MEDIA_MAX_SPEED;
     generalAttributes.MaxRcvLinkSpeed = XENNET_MEDIA_MAX_SPEED;
     generalAttributes.XmitLinkSpeed = XENNET_MEDIA_MAX_SPEED;
