@@ -57,7 +57,12 @@ xennet_coinst_@MAJOR_VERSION@_@MINOR_VERSION@_@MICRO_VERSION@_@BUILD_NUMBER@.dll
 %Citrix%=Citrix,NT$ARCH$
 
 [Citrix.NT$ARCH$]
-%DriverDesc%=XenNet_Inst,XENVIF\DEVICE&REV_02
+; DisplayName		Section		DeviceID
+; -----------		-------		--------
+
+%XenNetDesc%		=XenNet_Inst,	XENVIF\VEN_XSC000&DEV_NET&REV_00000000
+%XenNetDesc%		=XenNet_Inst,	XENVIF\VEN_XS0001&DEV_NET&REV_00000000
+%XenNetDesc%		=XenNet_Inst,	XENVIF\VEN_XS0002&DEV_NET&REV_00000000
 
 [XenNet_Inst] 
 Characteristics=0x84
@@ -180,8 +185,8 @@ HKR,,CoInstallers32,0x00010000,"xennet_coinst_@MAJOR_VERSION@_@MINOR_VERSION@_@M
 [Strings] 
 
 Citrix="Citrix Systems Inc." 
-DiskDesc="Citrix Tools for Virtual Machines" 
-DriverDesc="Citrix PV Network Adapter"
+DiskDesc="XenServer Tools for Virtual Machines" 
+XenNetDesc="XenServer PV Network Device"
 IPChecksumOffloadIPv4="IPv4 Checksum Offload"
 TCPChecksumOffloadIPv4="TCP Checksum Offload (IPv4)"
 UDPChecksumOffloadIPv4="UDP Checksum Offload (IPv4)"

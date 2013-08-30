@@ -34,7 +34,7 @@
 
 #include <ntddk.h>
 
-#include "log.h"
+#include "dbg_print.h"
 
 static FORCEINLINE VOID
 __BugCheck(

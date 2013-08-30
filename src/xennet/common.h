@@ -32,5 +32,5 @@
 
 #include "std.h"
 #include "project.h"
-#include "log.h"
+#include "dbg_print.h"
 #include "assert.h"

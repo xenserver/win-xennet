@@ -29,9 +29,10 @@
  * SUCH DAMAGE.
  */
 
-#ifndef _XENNET_LOG_H
-#define _XENNET_LOG_H
+#ifndef _XENNET_DBG_PRINT_H
+#define _XENNET_DBG_PRINT_H
 
+#include <ntddk.h>
 #include <stdarg.h>
 
 #pragma warning(disable:4127)   // conditional expression is constant
@@ -132,4 +133,27 @@ __Info(
 #define Info(...)  \
         __Info(__MODULE__ "|"  __FUNCTION__ ": ", __VA_ARGS__)
 
-#endif  // _XENNET_LOG_H
+#define DBG_PRINT_ENABLE_FILTER(_Id, _Level)                       \
+        do {                                                        \
+            DbgSetDebugFilterState((_Id), (_Level), TRUE);          \
+        } while (FALSE)
+
+static __inline VOID
+__DbgPrintEnable(
+    VOID
+    )
+{
+    DBG_PRINT_ENABLE_FILTER(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL);
+    DBG_PRINT_ENABLE_FILTER(DPFLTR_IHVDRIVER_ID, DPFLTR_WARNING_LEVEL);
+    DBG_PRINT_ENABLE_FILTER(DPFLTR_IHVDRIVER_ID, DPFLTR_TRACE_LEVEL);
+    DBG_PRINT_ENABLE_FILTER(DPFLTR_IHVDRIVER_ID, DPFLTR_INFO_LEVEL);
+
+#if DBG
+    DBG_PRINT_ENABLE_FILTER(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL);
+    DBG_PRINT_ENABLE_FILTER(DPFLTR_DEFAULT_ID, DPFLTR_WARNING_LEVEL);
+    DBG_PRINT_ENABLE_FILTER(DPFLTR_DEFAULT_ID, DPFLTR_TRACE_LEVEL);
+    DBG_PRINT_ENABLE_FILTER(DPFLTR_DEFAULT_ID, DPFLTR_INFO_LEVEL);
+#endif // DBG
+}
+
+#endif  // _XENNET_DBG_PRINT_H
