@@ -19,9 +19,9 @@ The particular device present in your VM will be determined by the binding
 of the XenBus driver. The DeviceID of the PCI device to which it is bound is
 echoed in the VEN_ substring of the devices it creates and this in turn is
 echoed through by XenVif. Hence only one of the above three variants will be
-present.
+present, although there will be an instance for every VIF (backend).
 
-To install the driver on your target system, copy the contents of the xenvif
+To install the driver on your target system, copy the contents of the xennet
 subdirectory onto the system, then navigate into the copy, to either the x86
 or x64 subdirectory (whichever is appropriate), and execute the copy of
 dpinst.exe you find there with Administrator privilege.
