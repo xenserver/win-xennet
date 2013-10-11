@@ -41,6 +41,7 @@
 #include <stdlib.h>
 #include <strsafe.h>
 #include <malloc.h>
+#include <stdarg.h>
 
 #include <tcpip.h>
 #include <version.h>
@@ -1234,9 +1235,6 @@ GetInstallerSettingsKeyName(
 {
     PTCHAR                  Location;
     HKEY                    InstallerKey;
-    DWORD                   MaxValueLength;
-    DWORD                   NameLength;
-    DWORD                   Type;
     HRESULT                 Error;
 
     Log("====>");
@@ -1262,44 +1260,7 @@ GetInstallerSettingsKeyName(
         goto fail2;
     }
 
-    Error = RegQueryInfoKey(InstallerKey,
-                            NULL,
-                            NULL,
-                            NULL,
-                            NULL,
-                            NULL,
-                            NULL,
-                            NULL,
-                            NULL,
-                            &MaxValueLength,
-                            NULL,
-                            NULL);
-    if (Error != ERROR_SUCCESS) {
-        SetLastError(Error);
-        goto fail3;
-    }
-
-    NameLength = MaxValueLength + sizeof (TCHAR);
-
-    *Name = calloc(1, NameLength);
-    if (Name == NULL)
-        goto fail4;
-
-    Error = RegQueryValueEx(InstallerKey,
-                            Location,
-                            NULL,
-                            &Type,
-                            (LPBYTE)*Name,
-                            &NameLength);
-    if (Error != ERROR_SUCCESS) {
-        SetLastError(Error);
-        goto fail5;
-    }
-
-    if (Type != REG_SZ) {
-        SetLastError(ERROR_BAD_FORMAT);
-        goto fail6;
-    }
+    *Name = Location;
 
     if (strlen(*Name) == 0) {
         free(*Name);
@@ -1308,30 +1269,12 @@ GetInstallerSettingsKeyName(
 
     RegCloseKey(InstallerKey);
 
-    free(Location);
-
 done:
     Log("%s", (*Name == NULL) ? "[NONE]" : *Name);
 
     Log("<====");
 
     return TRUE;
-
-fail6:
-    Log("fail6");
-
-fail5:
-    Log("fail5");
-
-    free(*Name);
-
-fail4:
-    Log("fail4");
-
-fail3:
-    Log("fail3");
-
-    RegCloseKey(InstallerKey);
 
 fail2:
     Log("fail2");
@@ -1353,7 +1296,8 @@ fail1:
 
 static HKEY
 OpenInstallerSettingsKey(
-    IN  PTCHAR  Name
+    IN  PTCHAR  Name,
+    IN  PTCHAR  SubKey
     )
 {
     HRESULT     Result;
@@ -1363,9 +1307,10 @@ OpenInstallerSettingsKey(
 
     Result = StringCbPrintf(KeyName,
                             MAX_PATH,
-                            "%s\\%s",
+                            "%s\\%s\\%s",
                             INSTALLER_KEY,
-                            Name);
+                            Name,
+                            SubKey);
     if (!SUCCEEDED(Result)) {
         SetLastError(ERROR_BUFFER_OVERFLOW);
         goto fail1;
@@ -1469,7 +1414,7 @@ GetInterfaceName(
         SetLastError(ERROR_BAD_FORMAT);
         goto fail4;
     }
-
+    Log("Got interface %s", RootDevice);
     RegCloseKey(LinkageKey);
 
     return RootDevice;
@@ -1502,13 +1447,11 @@ fail1:
 }
 
 static BOOLEAN
-CopyValues(
-    IN  PTCHAR  DestinationKeyName,
-    IN  PTCHAR  SourceKeyName
-    )
+CopyKeyValues(
+    HKEY        DestinationKey,
+    HKEY        SourceKey
+)
 {
-    HKEY        DestinationKey;
-    HKEY        SourceKey;
     HRESULT     Error;
     DWORD       Values;
     DWORD       MaxNameLength;
@@ -1516,6 +1459,127 @@ CopyValues(
     DWORD       MaxValueLength;
     LPBYTE      Value;
     DWORD       Index;
+
+    Error = RegQueryInfoKey(SourceKey,
+                            NULL,
+                            NULL,
+                            NULL,
+                            NULL,
+                            NULL,
+                            NULL,
+                            &Values,
+                            &MaxNameLength,
+                            &MaxValueLength,
+                            NULL,
+                            NULL);
+    if (Error != ERROR_SUCCESS) {
+        SetLastError(Error);
+        goto fail1;
+    }
+
+    if (Values == 0)
+        goto done;
+
+    MaxNameLength += sizeof (TCHAR);
+
+    Name = malloc(MaxNameLength);
+    if (Name == NULL)
+        goto fail2;
+
+    Value = malloc(MaxValueLength);
+    if (Value == NULL)
+        goto fail3;
+
+    for (Index = 0; Index < Values; Index++) {
+        DWORD   NameLength;
+        DWORD   ValueLength;
+        DWORD   Type;
+
+        NameLength = MaxNameLength;
+        memset(Name, 0, NameLength);
+
+        ValueLength = MaxValueLength;
+        memset(Value, 0, ValueLength);
+
+        Error = RegEnumValue(SourceKey,
+                             Index,
+                             (LPTSTR)Name,
+                             &NameLength,
+                             NULL,
+                             &Type,
+                             Value,
+                             &ValueLength);
+        if (Error != ERROR_SUCCESS) {
+            SetLastError(Error);
+            goto fail4;
+        }
+
+        Error = RegSetValueEx(DestinationKey,
+                              Name,
+                              0,
+                              Type,
+                              Value,
+                              ValueLength);
+        if (Error != ERROR_SUCCESS) {
+            SetLastError(Error);
+            goto fail5;
+        }
+
+        Log("COPIED %s", Name);
+    }
+
+    free(Value);
+    free(Name);
+
+    RegCloseKey(SourceKey);
+    RegCloseKey(DestinationKey);
+
+done:
+    return TRUE;
+
+fail5:
+    Log("fail5");
+
+fail4:
+    Log("fail4");
+
+    free(Value);
+
+fail3:
+    Log("fail3");
+
+    free(Name);
+
+fail2:
+    Log("fail2");
+
+fail1:
+    Log("fail1");
+
+    Error = GetLastError();
+
+    {
+        PTCHAR  Message;
+
+        Message = __GetErrorMessage(Error);
+        Log("fail1 (%s)", Message);
+        LocalFree(Message);
+    }
+
+    return FALSE;
+
+}
+
+static BOOLEAN
+CopyValues(
+    IN  PTCHAR  DestinationKeyName,
+    IN  PTCHAR  SourceKeyName
+    )
+{
+    HRESULT     Error;
+    HKEY        DestinationKey;
+    HKEY        SourceKey;
+
 
     Log("DESTINATION: %s", DestinationKeyName);
     Log("SOURCE: %s", SourceKeyName);
@@ -1543,102 +1607,8 @@ CopyValues(
         SetLastError(Error);
         goto fail2;
     }
-
-    Error = RegQueryInfoKey(SourceKey,
-                            NULL,
-                            NULL,
-                            NULL,
-                            NULL,
-                            NULL,
-                            NULL,
-                            &Values,
-                            &MaxNameLength,
-                            &MaxValueLength,
-                            NULL,
-                            NULL);
-    if (Error != ERROR_SUCCESS) {
-        SetLastError(Error);
-        goto fail3;
-    }
-
-    if (Values == 0)
-        goto done;
-
-    MaxNameLength += sizeof (TCHAR);
-
-    Name = malloc(MaxNameLength);
-    if (Name == NULL)
-        goto fail4;
-
-    Value = malloc(MaxValueLength);
-    if (Value == NULL)
-        goto fail5;
-
-    for (Index = 0; Index < Values; Index++) {
-        DWORD   NameLength;
-        DWORD   ValueLength;
-        DWORD   Type;
-
-        NameLength = MaxNameLength;
-        memset(Name, 0, NameLength);
-
-        ValueLength = MaxValueLength;
-        memset(Value, 0, ValueLength);
-
-        Error = RegEnumValue(SourceKey,
-                             Index,
-                             (LPTSTR)Name,
-                             &NameLength,
-                             NULL,
-                             &Type,
-                             Value,
-                             &ValueLength);
-        if (Error != ERROR_SUCCESS) {
-            SetLastError(Error);
-            goto fail6;
-        }
-
-        Error = RegSetValueEx(DestinationKey,
-                              Name,
-                              0,
-                              Type,
-                              Value,
-                              ValueLength);
-        if (Error != ERROR_SUCCESS) {
-            SetLastError(Error);
-            goto fail7;
-        }
-
-        Log("COPIED %s", Name);
-    }
-
-    free(Value);
-    free(Name);
-
-    RegCloseKey(SourceKey);
-    RegCloseKey(DestinationKey);
-
-done:
-    return TRUE;
-
-fail7:
-    Log("fail7");
-
-fail6:
-    Log("fail6");
-
-    free(Value);
-
-fail5:
-    Log("fail5");
-
-    free(Name);
-
-fail4:
-    Log("fail4");
-
-fail3:
-    Log("fail3");
+    
+    CopyKeyValues(DestinationKey, SourceKey);
 
     RegCloseKey(SourceKey);
 
@@ -1659,8 +1629,8 @@ fail1:
     }
 
     return FALSE;
-}
 
+}
 static BOOLEAN
 CopyParameters(
     IN  PTCHAR  Prefix,
@@ -2135,6 +2105,60 @@ fail1:
     return FALSE;
 }
 
+static HKEY CreateFormattedKey(LPCTSTR Format, ...)
+{
+
+    HRESULT     Result;
+    TCHAR       KeyName[MAX_PATH];
+    HKEY        Key;
+    HRESULT     Error;
+    va_list Args;
+    va_start(Args, Format);
+
+    Result = StringCbVPrintf(KeyName,
+                            MAX_PATH,
+                            Format,
+                            Args);
+    if (!SUCCEEDED(Result)) {
+        SetLastError(ERROR_BUFFER_OVERFLOW);
+        goto fail1;
+    }
+
+    Error = RegCreateKeyEx(HKEY_LOCAL_MACHINE,
+                           KeyName,
+                           0,
+                           NULL,
+                           REG_OPTION_NON_VOLATILE,
+                           KEY_ALL_ACCESS,
+                           NULL,
+                           &Key,
+                           NULL);
+    if (Error != ERROR_SUCCESS) {
+        Log("Unable to find key %s",KeyName);
+        SetLastError(Error);
+        goto fail2;
+    }
+
+    va_end(Format);
+    return Key;
+
+fail2:
+    Log("fail2");
+
+fail1:
+    Error = GetLastError();
+
+    {
+        PTCHAR  Message;
+        Message = __GetErrorMessage(Error);
+        Log("fail1 (%s)", Message);
+        LocalFree(Message);
+    }
+
+    va_end(Format);
+    return NULL;
+}
+
 static BOOLEAN
 CopySettingsFromInstaller(
     IN  HDEVINFO                    DeviceInfoSet,
@@ -2142,36 +2166,109 @@ CopySettingsFromInstaller(
     IN  PTCHAR                      Name
     )
 {
-    HKEY                            Source;
     HKEY                            Destination;
-    BOOLEAN                         Success;
     HRESULT                         Error;
+    PTCHAR  DestinationName;
+    HKEY tcpip6_dst;
+    HKEY tcpip_dst;
+    HKEY netbt_dst;
+    HKEY tcpip6_src;
+    HKEY tcpip_src;
+    HKEY netbt_src;
 
-    Source = OpenInstallerSettingsKey(Name);
-    if (Source == NULL)
-        goto fail1;
 
     Destination = OpenSoftwareKey(DeviceInfoSet, DeviceInfoData);
     if (Destination == NULL)
+        goto fail1;
+
+    DestinationName = GetInterfaceName(Destination);
+    if (DestinationName == NULL)
         goto fail2;
 
-    Success = CopySettings(Destination, Source);
-    if (!Success)
+
+    netbt_src = OpenInstallerSettingsKey(Name, "nbt");
+    if (netbt_src == NULL)
         goto fail3;
 
+    Log("Looking for destination %s", DestinationName);
+    netbt_dst = CreateFormattedKey(PARAMETERS_KEY(NetBT) "\\Interfaces\\Tcpip_%s", DestinationName);
+    if (netbt_dst == NULL)
+        goto fail4;
+
+    if (!CopyKeyValues(netbt_dst, netbt_src))
+        goto fail5;
+
+    tcpip_src = OpenInstallerSettingsKey(Name, "tcpip");
+    if (tcpip_src == NULL)
+        goto fail6;
+
+    tcpip_dst = CreateFormattedKey(PARAMETERS_KEY(Tcpip) "\\Interfaces\\%s", DestinationName);
+    if (tcpip_dst == NULL)
+        goto fail7;
+
+    if (!CopyKeyValues(tcpip_dst, tcpip_src))
+        goto fail8;
+
+    tcpip6_src = OpenInstallerSettingsKey(Name, "tcpip6");
+    if (tcpip6_src == NULL)
+        goto fail9;
+
+    tcpip6_dst = CreateFormattedKey(PARAMETERS_KEY(Tcpip6) "\\Interfaces\\%s", DestinationName);
+    if (tcpip6_dst == NULL)
+        goto fail10;
+
+    if (!CopyKeyValues(tcpip6_dst, tcpip6_src))
+        goto fail11;
+
+    RegCloseKey(tcpip6_dst);
+    RegCloseKey(tcpip6_src);
+    RegCloseKey(tcpip_dst);
+    RegCloseKey(tcpip_src);
+    RegCloseKey(netbt_dst);
+    RegCloseKey(netbt_src);
+    free(DestinationName);
+    RegCloseKey(Destination);
     return TRUE;
+
+fail11:
+    Log("fail11");
+    RegCloseKey(tcpip6_dst);
+
+fail10:
+    Log("fail10");
+    RegCloseKey(tcpip_src);
+
+fail9:
+    Log("fail9");
+fail8:
+    Log("fail8");
+    RegCloseKey(tcpip_dst);
+
+fail7:
+    Log("fail7");
+    RegCloseKey(tcpip_src);
+
+fail6:
+    Log("fail6");
+fail5:
+    Log("fail5");
+    RegCloseKey(netbt_dst);
+
+fail4:
+    Log("fail4");
+    RegCloseKey(netbt_src);
 
 fail3:
     Log("fail3");
-
-    RegCloseKey(Destination);
+    free(DestinationName);
 
 fail2:
     Log("fail2");
-
-    RegCloseKey(Source);
+    RegCloseKey(Destination);
 
 fail1:
+    Log("fail1");
+
     Error = GetLastError();
 
     {
