@@ -1611,6 +1611,9 @@ CopyValues(
     CopyKeyValues(DestinationKey, SourceKey);
 
     RegCloseKey(SourceKey);
+    RegCloseKey(DestinationKey);
+
+    return TRUE;
 
 fail2:
     Log("fail2");
@@ -1629,7 +1632,6 @@ fail1:
     }
 
     return FALSE;
-
 }
 
 static BOOLEAN
