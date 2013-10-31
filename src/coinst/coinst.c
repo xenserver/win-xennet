@@ -39,6 +39,7 @@
 #include <devguid.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <tchar.h>
 #include <strsafe.h>
 #include <malloc.h>
 #include <stdarg.h>
@@ -1294,6 +1295,57 @@ fail1:
     return FALSE;
 }
 
+static PTCHAR
+GetInstallerSettingsPath(
+    IN  PTCHAR  Name
+    )
+{
+    HRESULT     Result;
+    PTCHAR      PathName;
+    HRESULT     Error;
+    DWORD       BufferSize;
+    
+    BufferSize = (DWORD)(strlen(INSTALLER_KEY) +
+                         strlen("\\") +
+                         strlen(Name) +
+                         sizeof(TCHAR));
+
+    PathName = malloc(BufferSize);
+
+    if (PathName == NULL)
+        goto fail1;
+
+    Result = StringCbPrintf(PathName,
+                            MAX_PATH,
+                            "%s\\%s",
+                            INSTALLER_KEY,
+                            Name);
+    
+    if (!SUCCEEDED(Result)) {
+        SetLastError(ERROR_BUFFER_OVERFLOW);
+        goto fail2;
+    } 
+
+    return PathName;
+
+fail2:
+    Log("fail2");
+    free(PathName);
+
+fail1:
+    Error = GetLastError();
+
+    {
+        PTCHAR  Message;
+        Message = __GetErrorMessage(Error);
+        Log("fail1 (%s)", Message);
+        LocalFree(Message);
+    }
+
+    return NULL;
+
+}
+
 static HKEY
 OpenInstallerSettingsKey(
     IN  PTCHAR  Name,
@@ -1720,7 +1772,8 @@ fail1:
 
 static BOOLEAN
 CopyIpVersion6Addresses(
-    IN  PTCHAR  KeyName,
+    IN  PTCHAR  DestinationKeyName,
+    IN  PTCHAR  SourceKeyName,
     IN  PTCHAR  DestinationValueName,
     IN  PTCHAR  SourceValueName
     )
@@ -1735,11 +1788,11 @@ CopyIpVersion6Addresses(
     LPBYTE      Value;
     DWORD       Index;
 
-    Log("DESTINATION: %s\\%s", KeyName, DestinationValueName);
-    Log("SOURCE: %s\\%s", KeyName, SourceValueName);
+    Log("DESTINATION: %s\\%s", DestinationKeyName, DestinationValueName);
+    Log("SOURCE: %s\\%s", SourceKeyName, SourceValueName);
 
     Error = RegCreateKeyEx(HKEY_LOCAL_MACHINE,
-                           KeyName,
+                           DestinationKeyName,
                            0,
                            NULL,
                            REG_OPTION_NON_VOLATILE,
@@ -1753,7 +1806,7 @@ CopyIpVersion6Addresses(
     }
 
     Error = RegOpenKeyEx(HKEY_LOCAL_MACHINE,
-                         KeyName,
+                         SourceKeyName,
                          0,
                          KEY_ALL_ACCESS,
                          &SourceKey);
@@ -1816,8 +1869,10 @@ CopyIpVersion6Addresses(
             goto fail6;
         }
 
-        if (strncmp(Name, SourceValueName, sizeof (ULONG64) * 2) != 0)
+        if (strncmp(Name, SourceValueName, sizeof (ULONG64) * 2) != 0){
+            Log("Ignoring %s ( %s )", Name, SourceValueName);
             continue;
+        }
 
         Log("READ: %s", Name);
 
@@ -2070,6 +2125,7 @@ CopySettings(
         goto fail4;
 
     Success &= CopyIpVersion6Addresses(NSI_KEY "\\{eb004a01-9b1a-11d4-9123-0050047759bc}\\10\\",
+                                       NSI_KEY "\\{eb004a01-9b1a-11d4-9123-0050047759bc}\\10\\",
                                        DestinationName,
                                        SourceName);
 
@@ -2184,6 +2240,8 @@ CopySettingsFromInstaller(
     HKEY                            Tcpip6Src;
     HKEY                            TcpipSrc;
     HKEY                            NetbtSrc;
+    PTCHAR                          InstallerSettingsPath;
+    PTCHAR                          IPv6DstName;
 
     Destination = OpenSoftwareKey(DeviceInfoSet, DeviceInfoData);
     if (Destination == NULL)
@@ -2228,6 +2286,24 @@ CopySettingsFromInstaller(
     if (!CopyKeyValues(Tcpip6Dst, Tcpip6Src))
         goto fail11;
 
+    InstallerSettingsPath = GetInstallerSettingsPath(Name);
+
+    if (InstallerSettingsPath == NULL)
+        goto fail12;
+
+    IPv6DstName = GetIpVersion6AddressValueName(Destination);
+
+    if (IPv6DstName == NULL)
+        goto fail13;
+
+    if (!CopyIpVersion6Addresses(NSI_KEY "\\{eb004a01-9b1a-11d4-9123-0050047759bc}\\10\\",
+                                 InstallerSettingsPath,
+                                 IPv6DstName,
+                                 "IPv6_Address_____"))
+        goto fail14;
+
+    free(IPv6DstName);
+    free(InstallerSettingsPath);
     RegCloseKey(Tcpip6Dst);
     RegCloseKey(Tcpip6Src);
     RegCloseKey(TcpipDst);
@@ -2237,6 +2313,17 @@ CopySettingsFromInstaller(
     free(DestinationName);
     RegCloseKey(Destination);
     return TRUE;
+
+fail14:
+    Log("fail14");
+    free(IPv6DstName);
+
+fail13:
+    Log("fail13");
+    free(InstallerSettingsPath);
+
+fail12:
+    Log("fail12");
 
 fail11:
     Log("fail11");
