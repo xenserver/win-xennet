@@ -1127,6 +1127,8 @@ ClearAliasSoftwareKeyName(
     HKEY                    AliasesKey;
     HRESULT                 Error;
 
+    Log("====>");
+
     Location = GetProperty(DeviceInfoSet,
                            DeviceInfoData,
                            SPDRP_LOCATION_INFORMATION);
@@ -1153,6 +1155,8 @@ ClearAliasSoftwareKeyName(
     RegCloseKey(AliasesKey);
 
     free(Location);
+
+    Log("<====");
 
     return TRUE;
 
@@ -1236,6 +1240,7 @@ GetInstallerSettingsKeyName(
 {
     PTCHAR                  Location;
     HKEY                    InstallerKey;
+    HKEY                    SubKey;
     HRESULT                 Error;
 
     Log("====>");
@@ -1247,6 +1252,8 @@ GetInstallerSettingsKeyName(
         goto fail1;
 
     *Name = NULL;
+    InstallerKey = NULL;
+    SubKey = NULL;
 
     Error = RegOpenKeyEx(HKEY_LOCAL_MACHINE,
                          INSTALLER_KEY,
@@ -1261,6 +1268,19 @@ GetInstallerSettingsKeyName(
         goto fail2;
     }
 
+    Error = RegOpenKeyEx(InstallerKey,
+                         Location,
+                         0,
+                         KEY_READ,
+                         &SubKey);
+    if (Error != ERROR_SUCCESS) {
+        if (Error == ERROR_FILE_NOT_FOUND)
+            goto done;
+
+        SetLastError(Error);
+        goto fail3;
+    }
+
     *Name = Location;
 
     if (strlen(*Name) == 0) {
@@ -1268,14 +1288,23 @@ GetInstallerSettingsKeyName(
         *Name = NULL;
     }
 
-    RegCloseKey(InstallerKey);
-
 done:
+    if (SubKey != NULL)
+        RegCloseKey(SubKey);
+
+    if (InstallerKey != NULL)
+        RegCloseKey(InstallerKey);
+
     Log("%s", (*Name == NULL) ? "[NONE]" : *Name);
 
     Log("<====");
 
     return TRUE;
+
+fail3:
+    Log("fail3");
+
+    RegCloseKey(InstallerKey);
 
 fail2:
     Log("fail2");
@@ -2678,6 +2707,8 @@ DecrementServiceCount(
     DWORD       Type;
     HRESULT     Error;
 
+    Log("====>");
+
     Error = RegOpenKeyEx(HKEY_LOCAL_MACHINE,
                          SERVICE_KEY(XENNET),
                          0,
@@ -2727,6 +2758,8 @@ DecrementServiceCount(
     *Count = Value;
 
     RegCloseKey(ServiceKey);
+
+    Log("<====  ");
 
     return TRUE;
 
@@ -3056,9 +3089,17 @@ __DifRemovePreProcess(
             goto fail2;
     }
 
+    Success = ClearAliasSoftwareKeyName(DeviceInfoSet,
+                                        DeviceInfoData);
+    if (!Success)
+        goto fail3;
+
     Log("<====");
 
     return NO_ERROR;
+
+fail3:
+    Log("fail3");
 
 fail2:
     Log("fail2");
@@ -3096,14 +3137,9 @@ __DifRemovePostProcess(
         goto fail1;
     }
 
-    Success = ClearAliasSoftwareKeyName(DeviceInfoSet,
-                                        DeviceInfoData);
-    if (!Success)
-        goto fail2;
-
     Success = DecrementServiceCount(&Count);
     if (!Success)
-        goto fail3;
+        goto fail2;
 
     if (Count == 0)
         (VOID) RequestReboot(DeviceInfoSet, DeviceInfoData);
@@ -3111,9 +3147,6 @@ __DifRemovePostProcess(
     Log("<====");
 
     return NO_ERROR;
-
-fail3:
-    Log("fail3");
 
 fail2:
     Log("fail2");
