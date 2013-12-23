@@ -76,6 +76,8 @@ __user_code;
 #define NSI_KEY \
         CONTROL_KEY ## "\\Nsi"
 
+#define ENUM_KEY "SYSTEM\\CurrentControlSet\\Enum"
+
 #define SOFTWARE_KEY "SOFTWARE\\Citrix"
 
 #define INSTALLER_KEY   \
@@ -930,7 +932,404 @@ fail1:
 }
 
 static BOOLEAN
-SetAliasSoftwareKeyName(
+WalkSubKeys(
+    IN  HKEY    Key,
+    IN  BOOLEAN (*Match)(HKEY, PTCHAR, PVOID),
+    IN  PVOID   Argument,
+    OUT PTCHAR  *SubKeyName
+    )
+{
+    HRESULT     Error;
+    DWORD       SubKeys;
+    DWORD       MaxSubKeyLength;
+    DWORD       SubKeyLength;
+    DWORD       Index;
+
+    Error = RegQueryInfoKey(Key,
+                            NULL,
+                            NULL,
+                            NULL,
+                            &SubKeys,
+                            &MaxSubKeyLength,
+                            NULL,
+                            NULL,
+                            NULL,
+                            NULL,
+                            NULL,
+                            NULL);
+    if (Error != ERROR_SUCCESS) {
+        SetLastError(Error);
+        goto fail1;
+    }
+
+    SubKeyLength = MaxSubKeyLength + sizeof (TCHAR);
+
+    *SubKeyName = malloc(SubKeyLength);
+    if (*SubKeyName == NULL)
+        goto fail2;
+
+    for (Index = 0; Index < SubKeys; Index++) {
+        SubKeyLength = MaxSubKeyLength + sizeof (TCHAR);
+        memset(*SubKeyName, 0, SubKeyLength);
+
+        Error = RegEnumKeyEx(Key,
+                             Index,
+                             (LPTSTR)*SubKeyName,
+                             &SubKeyLength,
+                             NULL,
+                             NULL,
+                             NULL,
+                             NULL);
+        if (Error != ERROR_SUCCESS) {
+            SetLastError(Error);
+            goto fail3;
+        }
+
+        Log("Checking %s", *SubKeyName);
+        
+        if (Match(Key, *SubKeyName, Argument))
+            goto done;
+    }
+
+    SetLastError(ERROR_FILE_NOT_FOUND);
+    goto fail4;
+        
+done:
+    return TRUE;
+
+fail4:
+    Log("fail4");
+
+fail3:
+    Log("fail3");
+
+    free(*SubKeyName);
+    *SubKeyName = NULL;
+
+fail2:
+    Log("fail2");
+
+fail1:
+    Error = GetLastError();
+
+    {
+        PTCHAR  Message;
+        Message = __GetErrorMessage(Error);
+        Log("fail1 (%s)", Message);
+        LocalFree(Message);
+    }
+
+    return FALSE;
+}
+
+static BOOLEAN
+IsInstance(
+    IN  HKEY    Key,
+    IN  PTCHAR  SubKeyName,
+    IN  PVOID   Argument
+    )
+{
+    PTCHAR      Name = Argument;
+    HKEY        SubKey;
+    HRESULT     Error;
+    DWORD       MaxValueLength;
+    DWORD       DriverLength;
+    PTCHAR      Driver;
+    DWORD       Type;
+
+    Error = RegOpenKeyEx(Key,
+                         SubKeyName,
+                         0,
+                         KEY_READ,
+                         &SubKey);
+    if (Error != ERROR_SUCCESS) {
+        SetLastError(Error);
+        goto fail1;
+    }
+
+    Error = RegQueryInfoKey(SubKey,
+                            NULL,
+                            NULL,
+                            NULL,
+                            NULL,
+                            NULL,
+                            NULL,
+                            NULL,
+                            NULL,
+                            &MaxValueLength,
+                            NULL,
+                            NULL);
+    if (Error != ERROR_SUCCESS) {
+        SetLastError(Error);
+        goto fail2;
+    }
+
+    DriverLength = MaxValueLength + sizeof (TCHAR);
+
+    Driver = calloc(1, DriverLength);
+    if (Driver == NULL)
+        goto fail3;
+
+    Error = RegQueryValueEx(SubKey,
+                            "Driver",
+                            NULL,
+                            &Type,
+                            (LPBYTE)Driver,
+                            &DriverLength);
+    if (Error != ERROR_SUCCESS) {
+        SetLastError(Error);
+        goto fail4;
+    }
+
+    if (Type != REG_SZ) {
+        SetLastError(ERROR_BAD_FORMAT);
+        goto fail5;
+    }
+
+    if (strncmp(Driver, Name, DriverLength) != 0) {
+        SetLastError(ERROR_FILE_NOT_FOUND);
+        goto fail6;
+    }
+
+    free(Driver);
+
+    return TRUE;
+
+fail6:
+    Log("fail6");
+
+fail5:
+    Log("fail5");
+
+fail4:
+    Log("fail4");
+
+    free(Driver);
+
+fail3:
+    Log("fail3");
+
+fail2:
+    Log("fail2");
+
+    RegCloseKey(SubKey);
+
+fail1:
+    Error = GetLastError();
+
+    {
+        PTCHAR  Message;
+        Message = __GetErrorMessage(Error);
+        Log("fail1 (%s)", Message);
+        LocalFree(Message);
+    }
+
+    return FALSE;
+}
+
+typedef struct _DEVICE_WALK {
+    PTCHAR  Driver;
+    PTCHAR  Device;
+    PTCHAR  Instance;
+} DEVICE_WALK, *PDEVICE_WALK;
+
+static BOOLEAN
+IsDevice(
+    IN  HKEY        Key,
+    IN  PTCHAR      SubKeyName,
+    IN  PVOID       Argument
+    )
+{
+    PDEVICE_WALK    Walk = Argument;
+    HRESULT         Error;
+    HKEY            SubKey;
+
+    Error = RegOpenKeyEx(Key,
+                         SubKeyName,
+                         0,
+                         KEY_READ,
+                         &SubKey);
+    if (Error != ERROR_SUCCESS) {
+        SetLastError(Error);
+        goto fail1;
+    }
+
+    if (!WalkSubKeys(SubKey,
+                     IsInstance,
+                     Walk->Driver,
+                     &Walk->Instance)) {
+        SetLastError(ERROR_FILE_NOT_FOUND);
+        goto fail2;
+    }
+
+    return TRUE;
+
+fail2:
+    Log("fail2");
+
+    RegCloseKey(SubKey);
+
+fail1:
+    Error = GetLastError();
+
+    {
+        PTCHAR  Message;
+        Message = __GetErrorMessage(Error);
+        Log("fail1 (%s)", Message);
+        LocalFree(Message);
+    }
+
+    return FALSE;
+}
+
+static BOOLEAN
+OpenEnumKey(
+    IN  const TCHAR *Bus,
+    OUT PHKEY       Key
+    )
+{   
+    TCHAR           KeyName[MAX_PATH];
+    HRESULT         Result;
+    HRESULT         Error;
+
+    Result = StringCbPrintf(KeyName,
+                            MAX_PATH,
+                            "%s\\%s",
+                            ENUM_KEY,
+                            Bus);
+    if (!SUCCEEDED(Result)) {
+        SetLastError(ERROR_BUFFER_OVERFLOW);
+        goto fail1;
+    }
+
+    Log("%s", KeyName);
+
+    Error = RegOpenKeyEx(HKEY_LOCAL_MACHINE,
+                         KeyName,
+                         0,
+                         KEY_READ,
+                         Key);
+    if (Error != ERROR_SUCCESS) {
+        SetLastError(Error);
+        goto fail2;
+    }
+
+    return TRUE;
+
+fail2:
+    Log("fail2");
+
+fail1:
+    Error = GetLastError();
+
+    {
+        PTCHAR  Message;
+        Message = __GetErrorMessage(Error);
+        Log("fail1 (%s)", Message);
+        LocalFree(Message);
+    }
+
+    return FALSE;
+}
+
+static BOOLEAN
+FindAliasHardwareKeyName(
+    IN  PETHERNET_ADDRESS   Address,
+    OUT PTCHAR              *Name
+    )
+{
+    PTCHAR                  SoftwareKeyName;
+    DEVICE_WALK             Walk;
+    BOOLEAN                 Success;
+    HKEY                    PciKey;
+    HRESULT                 Error;
+    DWORD                   NameLength;
+    HRESULT                 Result;
+
+    Log("====>");
+
+    if (!FindAliasSoftwareKeyName(Address, &SoftwareKeyName))
+        goto fail1;
+
+    Walk.Driver = SoftwareKeyName;
+
+    Success = OpenEnumKey("PCI", &PciKey);
+    if (!Success)
+        goto fail2;
+
+    if (!WalkSubKeys(PciKey,
+                     IsDevice,
+                     &Walk,
+                     &Walk.Device)) {
+        SetLastError(ERROR_FILE_NOT_FOUND);
+        goto fail3;
+    }
+
+    NameLength = (DWORD)((strlen(ENUM_KEY) + 1 +
+                          strlen("PCI") + 1 +
+                          strlen(Walk.Device) + 1 +
+                          strlen(Walk.Instance) + 1) *
+                         sizeof (TCHAR));
+
+    *Name = calloc(1, NameLength);
+    if (*Name == NULL)
+        goto fail4;
+
+    Result = StringCbPrintf(*Name,
+                            NameLength,
+                            "%s\\PCI\\%s\\%s",
+                            ENUM_KEY,
+                            Walk.Device,
+                            Walk.Instance);
+    if (!SUCCEEDED(Result)) {
+        SetLastError(ERROR_BUFFER_OVERFLOW);
+        goto fail4;
+    }
+
+    free(Walk.Instance);
+    free(Walk.Device);
+
+    RegCloseKey(PciKey);
+
+    free(SoftwareKeyName);
+
+    Log("%s", *Name);
+
+    Log("<====");
+
+    return TRUE;
+
+fail4:
+    Log("fail4");
+
+    free(Walk.Instance);
+    free(Walk.Device);
+
+fail3:
+    Log("fail3");
+
+    RegCloseKey(PciKey);
+    
+fail2:
+    Log("fail2");
+
+    free(SoftwareKeyName);
+
+fail1:
+    Error = GetLastError();
+
+    {
+        PTCHAR  Message;
+        Message = __GetErrorMessage(Error);
+        Log("fail1 (%s)", Message);
+        LocalFree(Message);
+    }
+
+    return FALSE;
+}
+
+static BOOLEAN
+SetAliasHardwareKeyName(
     IN  HDEVINFO            DeviceInfoSet,
     IN  PSP_DEVINFO_DATA    DeviceInfoData,
     IN  PTCHAR              Name
@@ -1002,7 +1401,7 @@ fail1:
 }
 
 static BOOLEAN
-GetAliasSoftwareKeyName(
+GetAliasHardwareKeyName(
     IN  HDEVINFO            DeviceInfoSet,
     IN  PSP_DEVINFO_DATA    DeviceInfoData,
     OUT PTCHAR              *Name
@@ -1051,7 +1450,7 @@ GetAliasSoftwareKeyName(
     NameLength = MaxValueLength + sizeof (TCHAR);
 
     *Name = calloc(1, NameLength);
-    if (Name == NULL)
+    if (*Name == NULL)
         goto fail4;
 
     Error = RegQueryValueEx(AliasesKey,
@@ -1118,7 +1517,125 @@ fail1:
 }
 
 static BOOLEAN
-ClearAliasSoftwareKeyName(
+GetAliasSoftwareKeyName(
+    IN  HDEVINFO            DeviceInfoSet,
+    IN  PSP_DEVINFO_DATA    DeviceInfoData,
+    OUT PTCHAR              *Name
+    )
+{
+    BOOLEAN                 Success;
+    PTCHAR                  HardwareKeyName;
+    HRESULT                 Error;
+    HKEY                    HardwareKey;
+    DWORD                   MaxValueLength;
+    DWORD                   NameLength;
+    DWORD                   Type;
+
+    Success = GetAliasHardwareKeyName(DeviceInfoSet,
+                                      DeviceInfoData,
+                                      &HardwareKeyName);
+    if (!Success)
+        goto fail1;
+
+    *Name = NULL;
+
+    if (HardwareKeyName == NULL)
+        goto done;
+
+    Error = RegOpenKeyEx(HKEY_LOCAL_MACHINE,
+                         HardwareKeyName,
+                         0,
+                         KEY_READ,
+                         &HardwareKey);
+    if (Error != ERROR_SUCCESS) {
+        SetLastError(Error);
+        goto fail2;
+    }
+
+    Error = RegQueryInfoKey(HardwareKey,
+                            NULL,
+                            NULL,
+                            NULL,
+                            NULL,
+                            NULL,
+                            NULL,
+                            NULL,
+                            NULL,
+                            &MaxValueLength,
+                            NULL,
+                            NULL);
+    if (Error != ERROR_SUCCESS) {
+        SetLastError(Error);
+        goto fail3;
+    }
+
+    NameLength = MaxValueLength + sizeof (TCHAR);
+
+    *Name = calloc(1, NameLength);
+    if (*Name == NULL)
+        goto fail4;
+
+    Error = RegQueryValueEx(HardwareKey,
+                            "Driver",
+                            NULL,
+                            &Type,
+                            (LPBYTE)*Name,
+                            &NameLength);
+    if (Error != ERROR_SUCCESS) {
+        SetLastError(Error);
+        goto fail5;
+    }
+
+    if (Type != REG_SZ) {
+        SetLastError(ERROR_BAD_FORMAT);
+        goto fail6;
+    }
+
+    RegCloseKey(HardwareKey);
+
+    free(HardwareKeyName);
+
+done:
+    Log("%s", (*Name == NULL) ? "[NONE]" : *Name);
+
+    return TRUE;
+
+fail6:
+    Log("fail6");
+
+fail5:
+    Log("fail5");
+
+    free(*Name);
+
+fail4:
+    Log("fail4");
+
+fail3:
+    Log("fail3");
+
+    RegCloseKey(HardwareKey);
+
+fail2:
+    Log("fail2");
+
+    free(HardwareKeyName);
+
+fail1:
+    Error = GetLastError();
+
+    {
+        PTCHAR  Message;
+        Message = __GetErrorMessage(Error);
+        Log("fail1 (%s)", Message);
+        LocalFree(Message);
+    }
+
+    return FALSE;
+}
+
+static BOOLEAN
+ClearAliasHardwareKeyName(
     IN  HDEVINFO            DeviceInfoSet,
     IN  PSP_DEVINFO_DATA    DeviceInfoData
     )
@@ -1480,6 +1997,7 @@ GetInterfaceName(
         SetLastError(Error);
         goto fail3;
     }
+
     Error = RegQueryValueEx(LinkageKey,
                             "RootDevice",
                             NULL,
@@ -1495,7 +2013,9 @@ GetInterfaceName(
         SetLastError(ERROR_BAD_FORMAT);
         goto fail4;
     }
-    Log("Got interface %s", RootDevice);
+
+    Log("%s", RootDevice);
+
     RegCloseKey(LinkageKey);
 
     return RootDevice;
@@ -2838,7 +3358,7 @@ __DifInstallPreProcess(
 
     Log("====>");
 
-    Success = GetAliasSoftwareKeyName(DeviceInfoSet,
+    Success = GetAliasHardwareKeyName(DeviceInfoSet,
                                       DeviceInfoData,
                                       &Name);
     if (Success)
@@ -2848,11 +3368,11 @@ __DifInstallPreProcess(
     if (Address == NULL)
         goto fail1;
 
-    Success = FindAliasSoftwareKeyName(Address, &Name);
+    Success = FindAliasHardwareKeyName(Address, &Name);
     if (!Success)
         goto fail2;
 
-    Success = SetAliasSoftwareKeyName(DeviceInfoSet,
+    Success = SetAliasHardwareKeyName(DeviceInfoSet,
                                       DeviceInfoData,
                                       Name);
     if (!Success)
@@ -3089,7 +3609,7 @@ __DifRemovePreProcess(
             goto fail2;
     }
 
-    Success = ClearAliasSoftwareKeyName(DeviceInfoSet,
+    Success = ClearAliasHardwareKeyName(DeviceInfoSet,
                                         DeviceInfoData);
     if (!Success)
         goto fail3;
