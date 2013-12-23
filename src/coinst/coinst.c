@@ -747,6 +747,8 @@ FindAliasSoftwareKeyName(
     DWORD                   NameLength;
     HRESULT                 Result;
 
+    Log("====>");
+
     Success = GetNetLuid(Address, &NetLuid);
     if (!Success)
         goto fail1;
@@ -884,9 +886,11 @@ found:
         goto fail8;
     }
 
-    Log("%s", *Name);
-
 done:
+    Log("%s", (*Name == NULL) ? "[NONE]" : *Name);
+
+    Log("<====");
+
     return TRUE;
 
 fail8:
@@ -985,8 +989,6 @@ WalkSubKeys(
             goto fail3;
         }
 
-        Log("Checking %s", *SubKeyName);
-        
         if (Match(Key, *SubKeyName, Argument))
             goto done;
     }
@@ -1022,20 +1024,28 @@ fail1:
     return FALSE;
 }
 
+typedef struct _DEVICE_WALK {
+    PTCHAR  Driver;
+    PTCHAR  Device;
+    PTCHAR  Instance;
+} DEVICE_WALK, *PDEVICE_WALK;
+
 static BOOLEAN
 IsInstance(
-    IN  HKEY    Key,
-    IN  PTCHAR  SubKeyName,
-    IN  PVOID   Argument
+    IN  HKEY        Key,
+    IN  PTCHAR      SubKeyName,
+    IN  PVOID       Argument
     )
 {
-    PTCHAR      Name = Argument;
-    HKEY        SubKey;
-    HRESULT     Error;
-    DWORD       MaxValueLength;
-    DWORD       DriverLength;
-    PTCHAR      Driver;
-    DWORD       Type;
+    PDEVICE_WALK    Walk = Argument;
+    HKEY            SubKey;
+    HRESULT         Error;
+    DWORD           MaxValueLength;
+    DWORD           DriverLength;
+    PTCHAR          Driver;
+    DWORD           Type;
+
+    Log("====> (%s)", SubKeyName);
 
     Error = RegOpenKeyEx(Key,
                          SubKeyName,
@@ -1086,12 +1096,14 @@ IsInstance(
         goto fail5;
     }
 
-    if (strncmp(Driver, Name, DriverLength) != 0) {
+    if (strncmp(Driver, Walk->Driver, DriverLength) != 0) {
         SetLastError(ERROR_FILE_NOT_FOUND);
         goto fail6;
     }
 
     free(Driver);
+
+    Log("<====");
 
     return TRUE;
 
@@ -1127,12 +1139,6 @@ fail1:
     return FALSE;
 }
 
-typedef struct _DEVICE_WALK {
-    PTCHAR  Driver;
-    PTCHAR  Device;
-    PTCHAR  Instance;
-} DEVICE_WALK, *PDEVICE_WALK;
-
 static BOOLEAN
 IsDevice(
     IN  HKEY        Key,
@@ -1143,6 +1149,8 @@ IsDevice(
     PDEVICE_WALK    Walk = Argument;
     HRESULT         Error;
     HKEY            SubKey;
+
+    Log("====> (%s)", SubKeyName);
 
     Error = RegOpenKeyEx(Key,
                          SubKeyName,
@@ -1156,11 +1164,13 @@ IsDevice(
 
     if (!WalkSubKeys(SubKey,
                      IsInstance,
-                     Walk->Driver,
+                     Walk,
                      &Walk->Instance)) {
         SetLastError(ERROR_FILE_NOT_FOUND);
         goto fail2;
     }
+
+    Log("<====");
 
     return TRUE;
 
@@ -1251,6 +1261,11 @@ FindAliasHardwareKeyName(
     if (!FindAliasSoftwareKeyName(Address, &SoftwareKeyName))
         goto fail1;
 
+    *Name = NULL;
+
+    if (SoftwareKeyName == NULL)
+        goto done;
+
     Walk.Driver = SoftwareKeyName;
 
     Success = OpenEnumKey("PCI", &PciKey);
@@ -1293,7 +1308,8 @@ FindAliasHardwareKeyName(
 
     free(SoftwareKeyName);
 
-    Log("%s", *Name);
+done:
+    Log("%s", (*Name == NULL) ? "[NONE]" : *Name);
 
     Log("<====");
 
