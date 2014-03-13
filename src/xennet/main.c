@@ -41,6 +41,7 @@
 
 static NDIS_HANDLE MiniportDriverHandle;
 
+extern MINIPORT_INITIALIZE MiniportInitialize;
 extern NDIS_STATUS 
 MiniportInitialize (
     IN  NDIS_HANDLE                        MiniportAdapterHandle,
@@ -57,6 +58,7 @@ typedef struct _XENNET_CONTEXT {
 
 static NTSTATUS (*NdisDispatchPnp)(PDEVICE_OBJECT, PIRP);
 
+__drv_functionClass(IO_COMPLETION_ROUTINE)
 static NTSTATUS
 __QueryCapabilities(
     IN  PDEVICE_OBJECT      DeviceObject,
@@ -119,6 +121,8 @@ QueryCapabilities(
     return status;    
 }
 
+DRIVER_DISPATCH DispatchPnp;
+
 NTSTATUS 
 DispatchPnp(
     IN PDEVICE_OBJECT   DeviceObject,
@@ -145,6 +149,8 @@ DispatchPnp(
     return status;
 }
 
+DRIVER_DISPATCH DispatchFail;
+
 NTSTATUS 
 DispatchFail(
     IN PDEVICE_OBJECT   DeviceObject,
@@ -164,6 +170,8 @@ DispatchFail(
 
     return status;
 }
+
+DRIVER_INITIALIZE   DriverEntry;
 
 NTSTATUS 
 DriverEntry (
@@ -274,14 +282,18 @@ DriverEntry (
     ndisStatus = NDIS_STATUS_SUCCESS;
 
     NdisDispatchPnp = DriverObject->MajorFunction[IRP_MJ_PNP];
+#pragma prefast(suppress:28168) // No matching __drv_dispatchType annotation
     DriverObject->MajorFunction[IRP_MJ_PNP] = DispatchPnp;
 
     if (FailCreateClose != 0) {
+#pragma prefast(suppress:28168) // No matching__drv_dispatchType annotation
         DriverObject->MajorFunction[IRP_MJ_CREATE] = DispatchFail;
+#pragma prefast(suppress:28168) // No matching __drv_dispatchType annotation
         DriverObject->MajorFunction[IRP_MJ_CLOSE] = DispatchFail;
     }
 
     if (FailDeviceControl != 0) {
+#pragma prefast(suppress:28168) // No matching __drv_dispatchType annotation
         DriverObject->MajorFunction[IRP_MJ_DEVICE_CONTROL] = DispatchFail;
     }
 

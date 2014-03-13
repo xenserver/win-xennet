@@ -3006,11 +3006,11 @@ CopySettingsToAlias(
 
     Source = OpenSoftwareKey(DeviceInfoSet, DeviceInfoData);
     if (Source == NULL)
-        goto fail2;
+        goto fail1;
 
     Destination = OpenAliasSoftwareKey(Name);
     if (Destination == NULL)
-        goto fail1;
+        goto fail2;
 
     Success = CopySettings(Destination, Source);
     if (!Success)

@@ -58,6 +58,7 @@ AdapterSetOffloadAttributes (
     IN  PADAPTER Adapter
     );
 
+static MINIPORT_PROCESS_SG_LIST AdapterProcessSGList;
 static VOID
 AdapterProcessSGList (
     IN PDEVICE_OBJECT       DeviceObject,
@@ -139,10 +140,23 @@ static NDIS_OID XennetSupportedOids[] =
     (obj).Header.Size = sizeof(obj);                             \
 } while (0)
 
+NTSTATUS AllocAdapter(OUT PADAPTER *Adapter)
+{
+    if (Adapter == NULL)
+        return STATUS_INVALID_PARAMETER;
+
+    *Adapter = (PADAPTER)ExAllocatePoolWithTag(NonPagedPool, sizeof (ADAPTER), ' TEN');
+    if (*Adapter == NULL)
+        return STATUS_INSUFFICIENT_RESOURCES;
+
+    return STATUS_SUCCESS;
+}
+
 //
 // Scatter gather allocate handler callback.
 // Should never get called.
 //
+__drv_functionClass(MINIPORT_ALLOCATE_SHARED_MEM_COMPLETE)
 static VOID
 AdapterAllocateComplete (
     IN NDIS_HANDLE              MiniportAdapterContext,
@@ -169,11 +183,11 @@ AdapterAllocateComplete (
 //
 VOID
 AdapterCancelOidRequest (
-    IN  PADAPTER    Adapter,
+    IN  NDIS_HANDLE NdisHandle,
     IN  PVOID       RequestId
     )
 {
-    UNREFERENCED_PARAMETER(Adapter);
+    UNREFERENCED_PARAMETER(NdisHandle);
     UNREFERENCED_PARAMETER(RequestId);
 
     return;
@@ -186,11 +200,11 @@ AdapterCancelOidRequest (
 
 VOID 
 AdapterCancelSendNetBufferLists (
-    IN  PADAPTER    Adapter,
+    IN  NDIS_HANDLE NdisHandle,
     IN  PVOID       CancelId
     )
 {
-    UNREFERENCED_PARAMETER(Adapter);
+    UNREFERENCED_PARAMETER(NdisHandle);
     UNREFERENCED_PARAMETER(CancelId);
 
     return;
@@ -198,10 +212,10 @@ AdapterCancelSendNetBufferLists (
 
 BOOLEAN 
 AdapterCheckForHang (
-    IN  PADAPTER Adapter
+    IN  NDIS_HANDLE NdisHandle
     )
 {
-    UNREFERENCED_PARAMETER(Adapter);
+    UNREFERENCED_PARAMETER(NdisHandle);
 
     return FALSE;
 }
@@ -255,11 +269,12 @@ AdapterDelete (
 //
 VOID 
 AdapterHalt (
-    IN  PADAPTER                Adapter,
+    IN  NDIS_HANDLE             NdisHandle,
     IN  NDIS_HALT_ACTION        HaltAction
     )
 {
     NDIS_STATUS ndisStatus;
+    PADAPTER Adapter = (PADAPTER)NdisHandle;
 
     UNREFERENCED_PARAMETER(HaltAction);
 
@@ -436,7 +451,7 @@ AdapterInitialize (
 
     RtlZeroMemory(&Adapter->Capabilities, sizeof (Adapter->Capabilities));
 
-    Adapter->Transmitter = ExAllocatePoolWithTag(NonPagedPool, sizeof(TRANSMITTER), ' TEN');
+    Adapter->Transmitter = (PTRANSMITTER)ExAllocatePoolWithTag(NonPagedPool, sizeof(TRANSMITTER), ' TEN');
     if (!Adapter->Transmitter) {
         ndisStatus = NDIS_STATUS_RESOURCES;
         goto exit;
@@ -537,15 +552,13 @@ AdapterProcessSGList (
 //
 NDIS_STATUS 
 AdapterOidRequest (
-    IN  PADAPTER            Adapter,
+    IN  NDIS_HANDLE         NdisHandle,
     IN  PNDIS_OID_REQUEST   NdisRequest
     )
 {
     NDIS_STATUS ndisStatus;
+    PADAPTER Adapter = (PADAPTER)NdisHandle;
 
-    UNREFERENCED_PARAMETER(Adapter);
-    UNREFERENCED_PARAMETER(NdisRequest);
-    
     switch (NdisRequest->RequestType) {
         case NdisRequestSetInformation:            
             ndisStatus = AdapterSetInformation(Adapter, NdisRequest);
@@ -569,10 +582,11 @@ AdapterOidRequest (
 //
 NDIS_STATUS
 AdapterPause (
-    IN  PADAPTER                        Adapter,
+    IN  NDIS_HANDLE                     NdisHandle,
     IN  PNDIS_MINIPORT_PAUSE_PARAMETERS MiniportPauseParameters
     )
 {
+    PADAPTER Adapter = (PADAPTER)NdisHandle;
     UNREFERENCED_PARAMETER(MiniportPauseParameters);
 
     Trace("====>\n");
@@ -597,11 +611,11 @@ done:
 //
 VOID 
 AdapterPnPEventHandler (
-    IN  PADAPTER                Adapter,
+    IN  NDIS_HANDLE             NdisHandle,
     IN  PNET_DEVICE_PNP_EVENT   NetDevicePnPEvent
     )
 {
-    UNREFERENCED_PARAMETER(Adapter);
+    UNREFERENCED_PARAMETER(NdisHandle);
 
 
     switch (NetDevicePnPEvent->DevicePnPEvent) {
@@ -764,6 +778,8 @@ GetPacketFilter(PADAPTER Adapter, PULONG PacketFilter)
 //
 // Handles OID queries.
 //
+#pragma warning(push)
+#pragma warning(disable:6262)
 static NDIS_STATUS 
 AdapterQueryInformation (
     IN  PADAPTER            Adapter,
@@ -1303,6 +1319,7 @@ AdapterQueryInformation (
     NdisRequest->DATA.QUERY_INFORMATION.BytesNeeded = bytesNeeded;
     return ndisStatus;
 }
+#pragma warning(pop)
 
 NDIS_STATUS 
 AdapterReset (
@@ -1323,12 +1340,13 @@ AdapterReset (
 //
 NDIS_STATUS
 AdapterRestart (
-    IN  PADAPTER                            Adapter,
+    IN  NDIS_HANDLE                         MiniportAdapterContext,
     IN  PNDIS_MINIPORT_RESTART_PARAMETERS   MiniportRestartParameters
     )
 {
-    NTSTATUS                                status;
-    NDIS_STATUS                             ndisStatus;
+    NTSTATUS				     status;
+    NDIS_STATUS			     ndisStatus;
+    PADAPTER				     Adapter = (PADAPTER)MiniportAdapterContext;
 
     UNREFERENCED_PARAMETER(MiniportRestartParameters);
 
@@ -1361,11 +1379,13 @@ done:
 //
 VOID 
 AdapterReturnNetBufferLists (
-    IN  PADAPTER            Adapter,
+    IN  NDIS_HANDLE         MiniportAdapterContext,
     IN  PNET_BUFFER_LIST    NetBufferLists,
     IN  ULONG               ReturnFlags
     )
 {
+    PADAPTER Adapter = (PADAPTER)MiniportAdapterContext;
+
     ReceiverReturnNetBufferLists(&Adapter->Receiver,
                                  NetBufferLists,
                                  ReturnFlags);
@@ -1378,12 +1398,14 @@ AdapterReturnNetBufferLists (
 //
 VOID 
 AdapterSendNetBufferLists (
-    IN  PADAPTER            Adapter,
+    IN  NDIS_HANDLE         MiniportAdapterContext,
     IN  PNET_BUFFER_LIST    NetBufferList,
     IN  NDIS_PORT_NUMBER    PortNumber,
     IN  ULONG               SendFlags
     )
 {
+    PADAPTER Adapter = (PADAPTER)MiniportAdapterContext;
+
     TransmitterSendNetBufferLists(Adapter->Transmitter,
                                   NetBufferList,
                                   PortNumber,
@@ -2368,10 +2390,12 @@ AdapterSetRegistrationAttributes (
 //
 VOID 
 AdapterShutdown (
-    IN  PADAPTER                Adapter,
+    IN  NDIS_HANDLE             MiniportAdapterContext,
     IN  NDIS_SHUTDOWN_ACTION    ShutdownAction
     )
 {
+    PADAPTER Adapter = (PADAPTER)MiniportAdapterContext;
+
     UNREFERENCED_PARAMETER(ShutdownAction);
 
     if (ShutdownAction != NdisShutdownBugCheck)
