@@ -35,6 +35,8 @@
 
 #pragma warning( disable : 4098 )
 
+extern NTSTATUS AllocAdapter(PADAPTER *Adapter);
+
 static NTSTATUS
 QueryVifInterface(
     IN  PDEVICE_OBJECT      DeviceObject,
@@ -50,6 +52,7 @@ QueryVifInterface(
 
     KeInitializeEvent(&Event, NotificationEvent, FALSE);
     RtlZeroMemory(&StatusBlock, sizeof(IO_STATUS_BLOCK));
+    RtlZeroMemory(&Interface, sizeof(INTERFACE));
 
     Irp = IoBuildSynchronousFsdRequest(IRP_MJ_PNP,
                                        DeviceObject,
@@ -123,9 +126,9 @@ MiniportInitialize (
 
     Trace("====>\n");
 
-    adapter = ExAllocatePoolWithTag(NonPagedPool, sizeof (ADAPTER), ' TEN');
+    status = AllocAdapter(&adapter);
 
-    if (adapter == NULL) {
+    if (!NT_SUCCESS(status) || adapter == NULL) {
         ndisStatus = NDIS_STATUS_RESOURCES;
         goto exit;
     }

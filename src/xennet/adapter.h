@@ -70,21 +70,24 @@ struct _ADAPTER {
     NDIS_OFFLOAD            Offload;
 };
 
+MINIPORT_CANCEL_OID_REQUEST AdapterCancelOidRequest;
 VOID
 AdapterCancelOidRequest (
-    IN  PADAPTER    Adapter,
+    IN  NDIS_HANDLE NdisHandle,
     IN  PVOID       RequestId
     );
 
+MINIPORT_CANCEL_SEND AdapterCancelSendNetBufferLists;
 VOID 
 AdapterCancelSendNetBufferLists (
-    IN  PADAPTER    Adapter,
+    IN  NDIS_HANDLE NdisHandle,
     IN  PVOID       CancelId
     );
 
+MINIPORT_CHECK_FOR_HANG AdapterCheckForHang;
 BOOLEAN 
 AdapterCheckForHang (
-    IN  PADAPTER Adapter
+    IN  NDIS_HANDLE NdisHandle
     );
 
 VOID
@@ -92,9 +95,10 @@ AdapterDelete (
     IN  OUT PADAPTER* Adapter
     );
 
+MINIPORT_HALT AdapterHalt;
 VOID 
 AdapterHalt (
-    IN  PADAPTER            Adapter,
+    IN  NDIS_HANDLE         NdisHandle,
     IN  NDIS_HALT_ACTION    HaltAction
     );
 
@@ -104,54 +108,62 @@ AdapterInitialize (
     IN  NDIS_HANDLE AdapterHandle
     );
 
+MINIPORT_OID_REQUEST AdapterOidRequest;
 NDIS_STATUS 
 AdapterOidRequest (
-    IN  PADAPTER            Adapter,
+    IN  NDIS_HANDLE         NdisHandle,
     IN  PNDIS_OID_REQUEST   NdisRequest
     );
 
+MINIPORT_PAUSE AdapterPause;
 NDIS_STATUS 
 AdapterPause (
-    IN  PADAPTER                        Adapter,
+    IN  NDIS_HANDLE                     NdisHandle,
     IN  PNDIS_MINIPORT_PAUSE_PARAMETERS MiniportPauseParameters
     );
 
+MINIPORT_DEVICE_PNP_EVENT_NOTIFY AdapterPnPEventHandler;
 VOID 
 AdapterPnPEventHandler (
-    IN  PADAPTER                Adapter,
+    IN  NDIS_HANDLE             NdisHandle,
     IN  PNET_DEVICE_PNP_EVENT   NetDevicePnPEvent
     );
 
+MINIPORT_RESET AdapterReset;
 NDIS_STATUS 
 AdapterReset (
     IN  NDIS_HANDLE     MiniportAdapterContext,
     OUT PBOOLEAN        AddressingReset
     );
 
+MINIPORT_RESTART AdapterRestart;
 NDIS_STATUS 
 AdapterRestart (
-    IN  PADAPTER                            Adapter,
+    IN  NDIS_HANDLE                         MiniportAdapterContext,
     IN  PNDIS_MINIPORT_RESTART_PARAMETERS   MiniportRestartParameters
     );
 
+MINIPORT_RETURN_NET_BUFFER_LISTS AdapterReturnNetBufferLists;
 VOID 
 AdapterReturnNetBufferLists (
-    IN  PADAPTER            Adapter,
+    IN  NDIS_HANDLE         MiniportAdapterContext,
     IN  PNET_BUFFER_LIST    NetBufferLists,
     IN  ULONG               ReturnFlags
     );
 
+MINIPORT_SEND_NET_BUFFER_LISTS AdapterSendNetBufferLists;
 VOID 
 AdapterSendNetBufferLists (
-    IN  PADAPTER            Adapter,
+    IN  NDIS_HANDLE         MiniportAdapterContext,
     IN  PNET_BUFFER_LIST    NetBufferList,
     IN  NDIS_PORT_NUMBER    PortNumber,
     IN  ULONG               SendFlags
     );
 
+MINIPORT_SHUTDOWN AdapterShutdown;
 VOID 
 AdapterShutdown (
-    IN  PADAPTER                Adapter,
+    IN  NDIS_HANDLE             MiniportAdapterContext,
     IN  NDIS_SHUTDOWN_ACTION    ShutdownAction
     );
 
@@ -160,4 +172,3 @@ ReceiverReceivePackets(
     IN  PRECEIVER   Receiver,
     IN  PLIST_ENTRY List
     );
-

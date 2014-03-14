@@ -2077,6 +2077,8 @@ CopyKeyValues(
     LPBYTE      Value;
     DWORD       Index;
 
+    Log("====>");
+
     Error = RegQueryInfoKey(SourceKey,
                             NULL,
                             NULL,
@@ -2093,6 +2095,8 @@ CopyKeyValues(
         SetLastError(Error);
         goto fail1;
     }
+
+    Log("%d VALUES", Values);
 
     if (Values == 0)
         goto done;
@@ -2148,10 +2152,9 @@ CopyKeyValues(
     free(Value);
     free(Name);
 
-    RegCloseKey(SourceKey);
-    RegCloseKey(DestinationKey);
-
 done:
+    Log("<====");
+
     return TRUE;
 
 fail5:
@@ -2197,6 +2200,7 @@ CopyValues(
     HKEY        DestinationKey;
     HKEY        SourceKey;
 
+    Log("====>");
 
     Log("DESTINATION: %s", DestinationKeyName);
     Log("SOURCE: %s", SourceKeyName);
@@ -2229,6 +2233,8 @@ CopyValues(
 
     RegCloseKey(SourceKey);
     RegCloseKey(DestinationKey);
+
+    Log("<====");
 
     return TRUE;
 
@@ -2264,6 +2270,8 @@ CopyParameters(
     HRESULT     Result;
     HRESULT     Error;
     BOOLEAN     Success;
+
+    Log("====>");
 
     Length = (DWORD)((strlen(Prefix) +
                       strlen(DestinationName) +
@@ -2305,6 +2313,8 @@ CopyParameters(
 
     free(SourceKeyName);
     free(DestinationKeyName);
+
+    Log("<====");
 
     return Success;
 
@@ -3006,11 +3016,11 @@ CopySettingsToAlias(
 
     Source = OpenSoftwareKey(DeviceInfoSet, DeviceInfoData);
     if (Source == NULL)
-        goto fail2;
+        goto fail1;
 
     Destination = OpenAliasSoftwareKey(Name);
     if (Destination == NULL)
-        goto fail1;
+        goto fail2;
 
     Success = CopySettings(Destination, Source);
     if (!Success)
@@ -3295,7 +3305,7 @@ DecrementServiceCount(
 
     RegCloseKey(ServiceKey);
 
-    Log("<====  ");
+    Log("<====");
 
     return TRUE;
 

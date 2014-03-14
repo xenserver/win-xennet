@@ -38,12 +38,14 @@
 
 typedef struct _ADAPTER ADAPTER, *PADAPTER;
 
+DRIVER_INITIALIZE DriverEntry;
 NTSTATUS 
 DriverEntry (
     IN  PDRIVER_OBJECT   DriverObject,
     IN  PUNICODE_STRING  RegistryPath
     );
 
+MINIPORT_UNLOAD DriverUnload;
 VOID 
 DriverUnload (
     IN  PDRIVER_OBJECT  DriverObject

@@ -29,15 +29,15 @@
  * SUCH DAMAGE.
  */
 
-#ifndef _XENNET_ASSERT_H
-#define _XENNET_ASSERT_H
+#ifndef _XENVIF_ASSERT_H
+#define _XENVIF_ASSERT_H
 
 #include <ntddk.h>
 
 #include "dbg_print.h"
 
 static FORCEINLINE VOID
-__BugCheck(
+__Bug(
     IN  ULONG       Code,
     IN  ULONG_PTR   Parameter1,
     IN  ULONG_PTR   Parameter2,
@@ -62,11 +62,11 @@ __BugCheck(
             ULONG       _Line = __LINE__;                       \
                                                                 \
             Error("BUG: " _TEXT "\n");                          \
-            __BugCheck(ASSERTION_FAILURE,                       \
-                       (ULONG_PTR)_Text,                        \
-                       (ULONG_PTR)_File,                        \
-                       (ULONG_PTR)_Line,                        \
-                       0);                                      \
+            __Bug(ASSERTION_FAILURE,                            \
+                  (ULONG_PTR)_Text,                             \
+                  (ULONG_PTR)_File,                             \
+                  (ULONG_PTR)_Line,                             \
+                  0);                                           \
         } while (FALSE)
 
 #define BUG_ON(_EXP)                \
@@ -91,9 +91,10 @@ __BugCheck(
 
 #undef  ASSERT
 
-#define ASSERT(_EXP)        \
-        do {                \
-            __ASSERT(_EXP); \
+#define ASSERT(_EXP)                    \
+        do {                            \
+            __ASSERT(_EXP);             \
+            __analysis_assume(_EXP);    \
         } while (FALSE)
 
 #define ASSERT3U(_X, _OP, _Y)                       \
@@ -169,5 +170,4 @@ _IsZeroMemory(
 #define IMPLY(_X, _Y)   (!(_X) || (_Y))
 #define EQUIV(_X, _Y)   (IMPLY((_X), (_Y)) && IMPLY((_Y), (_X)))
 
-#endif  // _XENNET_ASSERT_H
-
+#endif  // _XENVIF_ASSERT_H
