@@ -35,6 +35,8 @@
 #include <ntddk.h>
 #include <stdarg.h>
 
+#define __MODULE__  "XENNET"
+
 #pragma warning(disable:4127)   // conditional expression is constant
 
 static __inline VOID

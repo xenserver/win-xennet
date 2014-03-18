@@ -72,6 +72,8 @@ __Bug(
 #define BUG_ON(_EXP)                \
         if (_EXP) BUG(#_EXP)
 
+#undef  ASSERT
+
 #if DBG
 
 #define __NT_ASSERT(_EXP)                                       \
@@ -82,14 +84,6 @@ __Bug(
         TRUE)
 
 #define __ASSERT(_EXP)  __NT_ASSERT(_EXP)
-
-#else   // DBG
-
-#define __ASSERT(_EXP)  BUG_ON(!(_EXP))
-
-#endif  // DBG
-
-#undef  ASSERT
 
 #define ASSERT(_EXP)                    \
         do {                            \
@@ -129,6 +123,15 @@ __Bug(
                 ASSERT(_X _OP _Y);                  \
             }                                       \
         } while (FALSE)
+
+#else   // DBG
+
+#define ASSERT(_EXP)
+#define ASSERT3U(_X, _OP, _Y)
+#define ASSERT3S(_X, _OP, _Y)
+#define ASSERT3P(_X, _OP, _Y)
+
+#endif  // DBG
 
 #ifndef TEST_MEMORY
 #define TEST_MEMORY DBG
