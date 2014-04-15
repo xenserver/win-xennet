@@ -35,7 +35,9 @@
 #include <ntddk.h>
 #include <stdarg.h>
 
-#define __MODULE__  "XENNET"
+#ifdef  _SDV_
+#define __MODULE__ ""
+#endif
 
 #pragma warning(disable:4127)   // conditional expression is constant
 

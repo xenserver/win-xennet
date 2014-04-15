@@ -29,8 +29,8 @@
  * SUCH DAMAGE.
  */
 
-#ifndef _XENVIF_ASSERT_H
-#define _XENVIF_ASSERT_H
+#ifndef _XENNET_ASSERT_H
+#define _XENNET_ASSERT_H
 
 #include <ntddk.h>
 
@@ -126,10 +126,21 @@ __Bug(
 
 #else   // DBG
 
-#define ASSERT(_EXP)
-#define ASSERT3U(_X, _OP, _Y)
-#define ASSERT3S(_X, _OP, _Y)
-#define ASSERT3P(_X, _OP, _Y)
+#pragma warning(disable:4100)
+
+#define ASSERT(_EXP)                    \
+        do {                            \
+            __analysis_assume(_EXP);    \
+        } while (FALSE)
+
+#define ASSERT3U(_X, _OP, _Y)           \
+        ASSERT(_X _OP _Y)
+
+#define ASSERT3S(_X, _OP, _Y)           \
+        ASSERT(_X _OP _Y)
+
+#define ASSERT3P(_X, _OP, _Y)           \
+        ASSERT(_X _OP _Y)
 
 #endif  // DBG
 
@@ -173,4 +184,4 @@ _IsZeroMemory(
 #define IMPLY(_X, _Y)   (!(_X) || (_Y))
 #define EQUIV(_X, _Y)   (IMPLY((_X), (_Y)) && IMPLY((_Y), (_X)))
 
-#endif  // _XENVIF_ASSERT_H
+#endif  // _XENNET_ASSERT_H

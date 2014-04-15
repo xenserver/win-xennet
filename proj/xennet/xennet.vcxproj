@@ -32,7 +32,7 @@
 	
 	<ItemDefinitionGroup>
 		<ClCompile>
-			<PreprocessorDefinitions>NDIS_MINIPORT_DRIVER;NDIS60_MINIPORT=1;POOL_NX_OPTIN=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+			<PreprocessorDefinitions>__MODULE__="XENNET";NDIS_MINIPORT_DRIVER;NDIS60_MINIPORT=1;POOL_NX_OPTIN=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
 			<WarningLevel>EnableAllWarnings</WarningLevel>
 			<DisableSpecificWarnings>4711;4548;4820;4668;4255;6001;6054;28196;%(DisableSpecificWarnings)</DisableSpecificWarnings>
 			<MultiProcessorCompilation>true</MultiProcessorCompilation>
