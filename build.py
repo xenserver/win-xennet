@@ -222,6 +222,22 @@ def sdv_clean(name):
     except OSError:
         pass
 
+    path = ['proj', name, 'refine.sdv']
+    print(path)
+
+    try:
+        os.unlink(os.path.join(*path))
+    except OSError:
+        pass
+
+    path = ['proj', name, 'sdv-map.h']
+    print(path)
+
+    try:
+        os.unlink(os.path.join(*path))
+    except OSError:
+        pass
+
 
 def run_sdv(name, dir):
     configuration = get_configuration('Windows 8', False)
@@ -231,6 +247,17 @@ def run_sdv(name, dir):
             '', os.path.join('proj', name))
 
     sdv_clean(name)
+
+    msbuild(platform, configuration, 'sdv', name + '.vcxproj',
+            '/p:Inputs="/scan"', os.path.join('proj', name))
+
+    path = ['proj', name, 'sdv-map.h']
+    file = open(os.path.join(*path), 'r')
+
+    for line in file:
+        print(line)
+
+    file.close()
 
     msbuild(platform, configuration, 'sdv', name + '.vcxproj',
             '/p:Inputs="/check:default.sdv"', os.path.join('proj', name))
@@ -243,6 +270,11 @@ def run_sdv(name, dir):
 
     path = ['proj', name, name + '.DVL.XML']
     shutil.copy(os.path.join(*path), dir)
+
+    path = ['proj', name, 'refine.sdv']
+    if os.path.isfile(os.path.join(*path)):
+        msbuild(platform, configuration, 'sdv', name + '.vcxproj',
+                '/p:Inputs=/refine', os.path.join('proj', name))
 
 
 def symstore_del(name, age):
