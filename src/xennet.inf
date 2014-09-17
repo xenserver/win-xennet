@@ -168,6 +168,10 @@ StartType=%SERVICE_DEMAND_START%
 ErrorControl=%SERVICE_ERROR_NORMAL% 
 ServiceBinary=%12%\xennet.sys 
 LoadOrderGroup="NDIS"
+AddReg=XenNet_AddReg
+
+[XenNet_AddReg]
+HKR,,BootFlags,0x00010003,0x01 ; CM_SERVICE_NETWORK_BOOT_LOAD
 
 [XenNet_EventLog]
 AddReg=XenNet_EventLog_AddReg
