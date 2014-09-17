@@ -35,6 +35,7 @@ ClassGUID={4d36e972-e325-11ce-bfc1-08002be10318}
 Provider=%Citrix% 
 CatalogFile=xennet.cat
 DriverVer=01/01/1900,0.0.0.0
+BootCritical=1
 
 [DestinationDirs] 
 DefaultDestDir=12 
