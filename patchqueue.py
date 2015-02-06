@@ -30,7 +30,7 @@
 
 baserepo = "git://hg.uk.xensource.com/closed/windows/xenbits/win-xennet.git"
 
-basetag = "cda57e4aa18198bd41b237e574ea9f71c8f2cba6"
+basetag = "9d7ae302ef9c325eca7a99800d3e4adefde9d3d5"
 
 package = "xennet"
 
