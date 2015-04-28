@@ -2802,8 +2802,7 @@ fail1:
 static BOOLEAN
 CopySettingsFromInstaller(
     IN  HDEVINFO                    DeviceInfoSet,
-    IN  PSP_DEVINFO_DATA            DeviceInfoData,
-    IN  PTCHAR                      Name
+    IN  PSP_DEVINFO_DATA            DeviceInfoData
     )
 {
     HKEY                            Destination;
@@ -2817,65 +2816,75 @@ CopySettingsFromInstaller(
     HKEY                            NetbtSrc;
     PTCHAR                          InstallerSettingsPath;
     PTCHAR                          IPv6DstName;
+    PTCHAR                          Name;
+    BOOLEAN                         Success;
+
+    Success = GetInstallerSettingsKeyName(DeviceInfoSet,
+                                          DeviceInfoData,
+                                          &Name);
+    if (!Success)
+        goto fail1;
+
+    if (Name == NULL)
+        goto fail2;
 
     Destination = OpenSoftwareKey(DeviceInfoSet, DeviceInfoData);
     if (Destination == NULL)
-        goto fail1;
+        goto fail3;
 
     DestinationName = GetInterfaceName(Destination);
     if (DestinationName == NULL)
-        goto fail2;
-
+        goto fail4;
 
     NetbtSrc = OpenInstallerSettingsKey(Name, "nbt");
     if (NetbtSrc == NULL)
-        goto fail3;
+        goto fail5;
 
     Log("Looking for destination %s", DestinationName);
     NetbtDst = CreateFormattedKey(PARAMETERS_KEY(NetBT) "\\Interfaces\\Tcpip_%s", DestinationName);
     if (NetbtDst == NULL)
-        goto fail4;
+        goto fail6;
 
     if (!CopyKeyValues(NetbtDst, NetbtSrc))
-        goto fail5;
+        goto fail7;
 
     TcpipSrc = OpenInstallerSettingsKey(Name, "tcpip");
     if (TcpipSrc == NULL)
-        goto fail6;
+        goto fail8;
 
     TcpipDst = CreateFormattedKey(PARAMETERS_KEY(Tcpip) "\\Interfaces\\%s", DestinationName);
     if (TcpipDst == NULL)
-        goto fail7;
+        goto fail9;
 
     if (!CopyKeyValues(TcpipDst, TcpipSrc))
-        goto fail8;
+        goto fail10;
 
     Tcpip6Src = OpenInstallerSettingsKey(Name, "tcpip6");
     if (Tcpip6Src == NULL)
-        goto fail9;
+        goto fail11;
 
     Tcpip6Dst = CreateFormattedKey(PARAMETERS_KEY(Tcpip6) "\\Interfaces\\%s", DestinationName);
     if (Tcpip6Dst == NULL)
-        goto fail10;
+        goto fail12;
 
     if (!CopyKeyValues(Tcpip6Dst, Tcpip6Src))
-        goto fail11;
+        goto fail13;
 
     InstallerSettingsPath = GetInstallerSettingsPath(Name);
 
     if (InstallerSettingsPath == NULL)
-        goto fail12;
+        goto fail14;
 
     IPv6DstName = GetIpVersion6AddressValueName(Destination);
 
     if (IPv6DstName == NULL)
-        goto fail13;
+        goto fail15;
 
     if (!CopyIpVersion6Addresses(NSI_KEY "\\{eb004a01-9b1a-11d4-9123-0050047759bc}\\10\\",
                                  InstallerSettingsPath,
                                  IPv6DstName,
                                  "IPv6_Address_____"))
-        goto fail14;
+        goto fail16;
 
     free(IPv6DstName);
     free(InstallerSettingsPath);
@@ -2887,54 +2896,64 @@ CopySettingsFromInstaller(
     RegCloseKey(NetbtSrc);
     free(DestinationName);
     RegCloseKey(Destination);
+    free(Name);
     return TRUE;
+
+fail16:
+    Log("fail16");
+    free(IPv6DstName);
+
+fail15:
+    Log("fail15");
+    free(InstallerSettingsPath);
 
 fail14:
     Log("fail14");
-    free(IPv6DstName);
 
 fail13:
     Log("fail13");
-    free(InstallerSettingsPath);
+    RegCloseKey(Tcpip6Dst);
 
 fail12:
     Log("fail12");
+    RegCloseKey(TcpipSrc);
 
 fail11:
     Log("fail11");
-    RegCloseKey(Tcpip6Dst);
+    RegCloseKey(TcpipDst);
 
 fail10:
     Log("fail10");
-    RegCloseKey(TcpipSrc);
 
 fail9:
     Log("fail9");
+    RegCloseKey(TcpipSrc);
+
 fail8:
     Log("fail8");
-    RegCloseKey(TcpipDst);
 
 fail7:
     Log("fail7");
-    RegCloseKey(TcpipSrc);
+    RegCloseKey(NetbtDst);
 
 fail6:
     Log("fail6");
+    RegCloseKey(NetbtSrc);
+
 fail5:
     Log("fail5");
-    RegCloseKey(NetbtDst);
+    free(DestinationName);
 
 fail4:
     Log("fail4");
-    RegCloseKey(NetbtSrc);
+    RegCloseKey(Destination);
 
 fail3:
     Log("fail3");
-    free(DestinationName);
+    free(Name);    
 
 fail2:
     Log("fail2");
-    RegCloseKey(Destination);
 
 fail1:
     Log("fail1");
@@ -2955,38 +2974,58 @@ fail1:
 static BOOLEAN
 CopySettingsFromAlias(
     IN  HDEVINFO                    DeviceInfoSet,
-    IN  PSP_DEVINFO_DATA            DeviceInfoData,
-    IN  PTCHAR                      Name
+    IN  PSP_DEVINFO_DATA            DeviceInfoData
     )
 {
     HKEY                            Source;
     HKEY                            Destination;
     BOOLEAN                         Success;
     HRESULT                         Error;
+    PTCHAR                          Name;
+
+    Success = GetAliasSoftwareKeyName(DeviceInfoSet,
+                                      DeviceInfoData,
+                                      &Name);
+    if (!Success)
+        goto fail1;
+
+    if (Name == NULL)
+        goto fail2;
 
     Source = OpenAliasSoftwareKey(Name);
     if (Source == NULL)
-        goto fail1;
+        goto fail3;
 
     Destination = OpenSoftwareKey(DeviceInfoSet, DeviceInfoData);
     if (Destination == NULL)
-        goto fail2;
+        goto fail4;
 
     Success = CopySettings(Destination, Source);
     if (!Success)
-        goto fail3;
+        goto fail5;
 
+    RegCloseKey(Destination);
+    RegCloseKey(Source);
+    free(Name);
     return TRUE;
+
+fail5:
+    Log("fail5");
+
+    RegCloseKey(Destination);
+
+fail4:
+    Log("fail4");
+
+    RegCloseKey(Source);
 
 fail3:
     Log("fail3");
 
-    RegCloseKey(Destination);
+    free(Name);
 
 fail2:
     Log("fail2");
-
-    RegCloseKey(Source);
 
 fail1:
     Error = GetLastError();
@@ -3004,7 +3043,6 @@ fail1:
 
 static BOOLEAN
 CopySettingsToAlias(
-    IN  PTCHAR                      Name,
     IN  HDEVINFO                    DeviceInfoSet,
     IN  PSP_DEVINFO_DATA            DeviceInfoData
     )
@@ -3012,31 +3050,52 @@ CopySettingsToAlias(
     HKEY                            Source;
     HKEY                            Destination;
     BOOLEAN                         Success;
+    PTCHAR                          Name;
     HRESULT                         Error;
+
+    Success = GetAliasSoftwareKeyName(DeviceInfoSet,
+                                      DeviceInfoData,
+                                      &Name);
+    if (!Success)
+        goto fail1;
+
+    if (Name == NULL)
+        goto fail2;
 
     Source = OpenSoftwareKey(DeviceInfoSet, DeviceInfoData);
     if (Source == NULL)
-        goto fail1;
+        goto fail3;
 
     Destination = OpenAliasSoftwareKey(Name);
     if (Destination == NULL)
-        goto fail2;
+        goto fail4;
 
     Success = CopySettings(Destination, Source);
     if (!Success)
-        goto fail3;
+        goto fail5;
 
+    RegCloseKey(Destination);
+    RegCloseKey(Source);
+    free(Name);
     return TRUE;
+
+fail5:
+    Log("fail5");
+
+    RegCloseKey(Destination);
+
+fail4:
+    Log("fail4");
+
+    RegCloseKey(Source);
 
 fail3:
     Log("fail3");
 
-    RegCloseKey(Destination);
+    free(Name);
 
 fail2:
     Log("fail2");
-
-    RegCloseKey(Source);
 
 fail1:
     Error = GetLastError();
@@ -3446,7 +3505,6 @@ __DifInstallPostProcess(
     )
 {
     BOOLEAN                         Success;
-    PTCHAR                          Name;
     DWORD                           Count;
     HRESULT                         Error;
 
@@ -3466,50 +3524,24 @@ __DifInstallPostProcess(
     if (!Success)
         goto fail2;
 
-    Success = GetInstallerSettingsKeyName(DeviceInfoSet,
-                                          DeviceInfoData,
-                                          &Name);
-    if (!Success)
-        goto fail3;
-
-    if (Name != NULL) {
-        Success = CopySettingsFromInstaller(DeviceInfoSet,
-                                            DeviceInfoData,
-                                            Name);
-
-        free(Name);
-
-        if (!Success)
-            goto fail4;
-
+    Success = CopySettingsFromInstaller(DeviceInfoSet,
+                                        DeviceInfoData);
+    if (Success)
         goto done;
-    }
 
-    Success = GetAliasSoftwareKeyName(DeviceInfoSet,
-                                      DeviceInfoData,
-                                      &Name);
-    if (!Success)
-        goto fail5;
-
-    if (Name != NULL) {
-        Success = CopySettingsFromAlias(DeviceInfoSet,
-                                        DeviceInfoData,
-                                        Name);
-
-        free(Name);
-
-        if (!Success)
-            goto fail6;
-    }
+    Success = CopySettingsFromAlias(DeviceInfoSet,
+                                    DeviceInfoData);
+    if (Success)
+        goto done;
 
 done:
     Success = RequestUnplug();
     if (!Success)
-        goto fail7;
+        goto fail3;
 
     Success = IncrementServiceCount(&Count);
     if (!Success)
-        goto fail8;
+        goto fail4;
 
     if (Count == 1)
         (VOID) RequestReboot(DeviceInfoSet, DeviceInfoData);
@@ -3517,18 +3549,6 @@ done:
     Log("<====");
 
     return NO_ERROR;
-
-fail8:
-    Log("fail8");
-
-fail7:
-    Log("fail7");
-
-fail6:
-    Log("fail6");
-
-fail5:
-    Log("fail5");
 
 fail4:
     Log("fail4");
@@ -3610,58 +3630,18 @@ __DifRemovePreProcess(
     IN  PCOINSTALLER_CONTEXT_DATA   Context
     )
 {
-    BOOLEAN                         Success;
-    PTCHAR                          Name;
-    HRESULT                         Error;
-
     UNREFERENCED_PARAMETER(Context);
 
     Log("====>");
 
-    Success = GetAliasSoftwareKeyName(DeviceInfoSet,
-                                      DeviceInfoData,
-                                      &Name);
-    if (!Success)
-        goto fail1;
+    (VOID) CopySettingsToAlias(DeviceInfoSet,
+                               DeviceInfoData);
 
-    if (Name != NULL) {
-        Success = CopySettingsToAlias(Name,
-                                      DeviceInfoSet,
-                                      DeviceInfoData);
-
-        free(Name);
-
-        if (!Success)
-            goto fail2;
-    }
-
-    Success = ClearAliasHardwareKeyName(DeviceInfoSet,
-                                        DeviceInfoData);
-    if (!Success)
-        goto fail3;
-
+    (VOID) ClearAliasHardwareKeyName(DeviceInfoSet,
+                                     DeviceInfoData);
     Log("<====");
 
     return NO_ERROR;
-
-fail3:
-    Log("fail3");
-
-fail2:
-    Log("fail2");
-
-fail1:
-    Error = GetLastError();
-
-    {
-        PTCHAR  Message;
-
-        Message = __GetErrorMessage(Error);
-        Log("fail1 (%s)", Message);
-        LocalFree(Message);
-    }
-
-    return Error;
 }
 
 static FORCEINLINE HRESULT
